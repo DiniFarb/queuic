@@ -1,0 +1,4 @@
+github.com/dinifarb/mlog v1.0.0 h1:9juET199uDF1NbVtlLanyc1kGW0eThXTcbx3sGctpD0=
+github.com/dinifarb/mlog v1.0.0/go.mod h1:QEOWY+no8+AH92MS0iZGH2ERdpvIKIkJODByMaQyYM8=
+github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
+github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
