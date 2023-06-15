@@ -9,6 +9,8 @@ import (
 	"github.com/dinifarb/queuic/pkg/server"
 )
 
+var srv *server.QueuicServer
+
 func main() {
 	fmt.Println(`
      ___                   _      
@@ -19,26 +21,27 @@ func main() {
    `)
 	mlog.SetAppName("QUEUEIC")
 	logLevel := os.Getenv("LOG_LEVEL")
-	switch strings.ToLower(logLevel) {
-	case "debug":
+	if strings.ToLower(logLevel) == "debug" {
 		mlog.SetLevel(mlog.Ldebug)
-	case "info":
-		mlog.SetLevel(mlog.Linfo)
-	case "warn":
-		mlog.SetLevel(mlog.Lwarn)
-	case "error":
-		mlog.SetLevel(mlog.Lerror)
-	default:
-		mlog.Warn("LOG_LEVEL env variable is not set use default level")
-		mlog.SetLevel(mlog.Linfo)
 	}
 	keyString := os.Getenv("QUEUEIC_KEY_STRING")
 	if keyString == "" {
 		mlog.Warn("QUEUEIC_KEY_STRING env variable is not set use default key")
 		keyString = "QUEUEIC"
 	}
-	svr := server.NewQueuicServer(keyString)
-	if err := svr.Serve(); err != nil {
+	srv = server.NewQueuicServer(keyString)
+	if err := srv.LoadQueuesFromDisk(); err != nil {
+		mlog.Error("failed to load queues from disk: %v", err)
+		os.Exit(1)
+	}
+	manager := NewManager()
+	go func() {
+		if err := manager.Start(); err != nil {
+			mlog.Error("failed to start manager: %v", err)
+			os.Exit(1)
+		}
+	}()
+	if err := srv.Serve(); err != nil {
 		mlog.Error("server error: %v", err)
 		os.Exit(1)
 	}
