@@ -47,6 +47,16 @@ func (q *QueueName) String() string {
 	return string(b[:])
 }
 
+func (q *QueueName) ParseFromString(s string) error {
+	b := []byte(s)
+	b = bytes.Trim(b, "\x00")
+	n := copy(q[:], b[:16])
+	if n < 16 {
+		return fmt.Errorf("string %v to long", s)
+	}
+	return nil
+}
+
 func Encode(q *Queuic) ([]byte, error) {
 	length := MIN_PACKET_LENGTH
 	if q.QueuicItem.Item != nil {

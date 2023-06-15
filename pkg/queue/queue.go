@@ -21,8 +21,8 @@ type Queue struct {
 	peeked  map[uuid.UUID]proto.QueuicItem
 	mu      sync.Mutex
 	store   store
-	added   int64
-	removed int64
+	added   uint64
+	removed uint64
 	Name    proto.QueueName
 }
 
@@ -71,6 +71,18 @@ func (q *Queue) Size() int {
 	return len(q.items) + len(q.peeked)
 }
 
+func (q *Queue) Enqueued() uint64 {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.added
+}
+
+func (q *Queue) Dequeued() uint64 {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.removed
+}
+
 func (q *Queue) Peek() (proto.QueuicItem, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -102,6 +114,17 @@ func (q *Queue) Accept(id uuid.UUID) error {
 	delete(q.peeked, id)
 	q.removed++
 	return q.saveToDisk()
+}
+
+func (q *Queue) Delete() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.store.file.Close()
+	fileName := fmt.Sprintf(path, q.Name.String())
+	if err := os.Remove(fileName); err != nil {
+		return fmt.Errorf("failed to remove queue file: %w", err)
+	}
+	return nil
 }
 
 func (q *Queue) saveToDisk() error {

@@ -11,6 +11,7 @@ import (
 	"github.com/dinifarb/mlog"
 	"github.com/dinifarb/queuic/pkg/proto"
 	"github.com/dinifarb/queuic/pkg/queue"
+	"github.com/google/uuid"
 )
 
 const (
@@ -29,6 +30,13 @@ type QueuicServer struct {
 type QueueStore struct {
 	sync.RWMutex
 	queues map[proto.QueueName]*queue.Queue
+}
+
+type QueueStats struct {
+	QueueName string `json:"queue_name"`
+	Size      int    `json:"size"`
+	Enequeued uint64 `json:"enequeued"`
+	Dequeued  uint64 `json:"dequeued"`
 }
 
 func NewQueuicServer(key string) *QueuicServer {
@@ -58,7 +66,82 @@ func (s *QueuicServer) CreateQueue(name proto.QueueName) error {
 	return nil
 }
 
-//TODO DeleteQueue, LoadQueuesFromDisk
+func (s *QueuicServer) DeleteQueue(name proto.QueueName) error {
+	s.queueStore.Lock()
+	defer s.queueStore.Unlock()
+	q, ok := s.queueStore.queues[name]
+	if !ok {
+		return fmt.Errorf("queue %s does not exist", name)
+	}
+	if err := q.Delete(); err != nil {
+		return fmt.Errorf("failed to delete queue: %v", err)
+	}
+	delete(s.queueStore.queues, name)
+	mlog.Info("deleted queue: %s", name)
+	return nil
+}
+
+func (s *QueuicServer) Enqueue(queue proto.QueueName, item []byte) error {
+	s.queueStore.Lock()
+	defer s.queueStore.Unlock()
+	q, ok := s.queueStore.queues[queue]
+	if !ok {
+		return fmt.Errorf("queue %s does not exist", queue)
+	}
+	i := proto.QueuicItem{
+		Id:   uuid.New(),
+		Item: item,
+	}
+	if err := q.Enqueue(i); err != nil {
+		return fmt.Errorf("failed to enqueue item: %v", err)
+	}
+	mlog.Debug("enqueued item: %s", item)
+	return nil
+}
+
+func (s *QueuicServer) LoadQueuesFromDisk() error {
+	s.queueStore.Lock()
+	defer s.queueStore.Unlock()
+	path := "./data"
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.Mkdir(path, 0755); err != nil {
+			return fmt.Errorf("failed to create data dir: %w", err)
+		}
+	}
+	files, err := os.ReadDir(path)
+	if err != nil {
+		return fmt.Errorf("failed to read dir: %w", err)
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		name := proto.QueueName{}
+		name.ParseFromString(file.Name())
+		q, err := queue.NewQueue(name)
+		if err != nil {
+			return fmt.Errorf("failed to create queue: %w", err)
+		}
+		mlog.Info("loaded queue: %s", q.Name)
+		s.queueStore.queues[q.Name] = q
+	}
+	return nil
+}
+
+func (s *QueuicServer) GetStats() []QueueStats {
+	s.queueStore.RLock()
+	defer s.queueStore.RUnlock()
+	stats := make([]QueueStats, 0, len(s.queueStore.queues))
+	for _, q := range s.queueStore.queues {
+		stats = append(stats, QueueStats{
+			QueueName: q.Name.String(),
+			Size:      q.Size(),
+			Enequeued: q.Enqueued(),
+			Dequeued:  q.Dequeued(),
+		})
+	}
+	return stats
+}
 
 func (s *QueuicServer) Serve() error {
 	s.shutdown = make(chan bool)
@@ -74,6 +157,7 @@ func (s *QueuicServer) Serve() error {
 		return fmt.Errorf("listen to UDP failed with: %v", err)
 	}
 	defer conn.Close()
+loop:
 	for {
 		var buff = make([]byte, MAX_PACKET_LENGTH)
 		n, remoteAddr, err := conn.ReadFromUDP(buff[:])
@@ -85,7 +169,7 @@ func (s *QueuicServer) Serve() error {
 		select {
 		case <-s.shutdown:
 			mlog.Info("shutdown signal received, shutting down")
-			return nil
+			break loop
 		default:
 			go func(buff []byte, remoteAddr *net.UDPAddr) {
 				mlog.Debug("received message from %s", remoteAddr)
@@ -113,6 +197,7 @@ func (s *QueuicServer) Serve() error {
 			}(append([]byte(nil), buff[:n]...), remoteAddr)
 		}
 	}
+	return nil
 }
 
 func (s *QueuicServer) Shutdown() {
