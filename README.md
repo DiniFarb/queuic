@@ -1,9 +1,9 @@
 # Queuic Message Broker
 
 ## Introduction
-This is a very small qeueue message broker that I wrote for learning pur. It is not meant to be used in production.
+This is a very small qeueue message broker that I wrote for learning. It is not meant to be used in production.
 
-## Features
+## TODO
 - [x] Simple massage queueing
 - [x] Message persistence
 - [x] Own protocol
